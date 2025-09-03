@@ -1,0 +1,85 @@
+{
+  "expo": {
+    "name": "IPTV App",
+    "slug": "iptv-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.furkan.iptvapp",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsArbitraryLoadsForMedia": true,
+          "NSAllowsArbitraryLoadsInWebContent": true,
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionMinimumTLSVersion": "TLSv1.0",
+          "NSExceptionRequiresForwardSecrecy": false,
+          "NSExceptionDomains": {
+            "ip.sltv.be": {
+              "NSIncludesSubdomains": true,
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSExceptionMinimumTLSVersion": "TLSv1.0",
+              "NSExceptionRequiresForwardSecrecy": false
+            }
+          }
+        },
+        "NSLocalNetworkUsageDescription": "IPTV App connects to devices and servers on your local network to load playlists and streams.",
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "AVPictureInPictureEnabled": true,
+        "AVAudioSessionCategory": "AVAudioSessionCategoryPlayback",
+        "AVAudioSessionCategoryOptions": [
+          "AVAudioSessionCategoryOptionMixWithOthers",
+          "AVAudioSessionCategoryOptionAllowBluetooth",
+          "AVAudioSessionCategoryOptionAllowBluetoothA2DP"
+        ]
+      }
+    },
+  "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "INTERNET",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "INTERNET",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "allowBackup": false,
+      "supportsPictureInPicture": true,
+      "package": "dev.furkan.iptvapp"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-video",
+        {
+          "supportsPictureInPicture": true
+        }
+      ],
+      "expo-audio"
+    ]
+  }
+}
