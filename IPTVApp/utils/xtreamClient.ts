@@ -6,10 +6,13 @@ import {
   XtreamChannel,
   ParsedXtreamResult
 } from '../types/xtream';
+import { Platform } from 'react-native';
+import { IOSNetworkHelper } from './iosNetworkHelper';
 
 export class XtreamCodesClient {
   private credentials: XtreamCredentials;
   private baseUrl: string;
+  private streamBaseUrl: string; // Separate URL für Streams
   private workingUserAgent: string = 'IPTV-App/1.0 (iOS) Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15';
 
   constructor(credentials: XtreamCredentials) {
@@ -25,8 +28,24 @@ export class XtreamCodesClient {
     
     // Intelligente URL-Normalisierung für verschiedene Xtream-Server-Formate
     this.baseUrl = this.normalizeXtreamUrl(url);
-    console.log('🔧 Normalized base URL:', this.baseUrl);
+    
+    // Separate Stream-Base-URL ohne player_api.php
+    this.streamBaseUrl = this.getStreamBaseUrl(url);
+    
+    console.log('🔧 Normalized API base URL:', this.baseUrl);
+    console.log('🔧 Stream base URL:', this.streamBaseUrl);
     console.log('🔧 Original URL:', credentials.serverUrl);
+  }
+
+  private getStreamBaseUrl(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      // Für Streams immer nur die Basis-URL (Protokoll + Host + Port) verwenden
+      return urlObj.origin;
+    } catch (error) {
+      console.error('Failed to parse stream base URL:', error);
+      return url.replace(/\/.*$/, ''); // Fallback: alles nach dem Hostname entfernen
+    }
   }
 
   private normalizeXtreamUrl(url: string): string {
@@ -209,8 +228,8 @@ export class XtreamCodesClient {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       
-      // Timeout nach 20 Sekunden
-      xhr.timeout = 20000;
+      // Timeout nach 30 Sekunden (länger für echte Geräte)
+      xhr.timeout = 30000;
       
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -242,11 +261,14 @@ export class XtreamCodesClient {
         console.log(`🌐 XHR Opening: ${url}`);
         xhr.open('GET', url, true);
         
-        // Headers setzen
-        xhr.setRequestHeader('Accept', 'application/json');
+        // Headers setzen - wichtig für iOS Geräte
+        xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
         xhr.setRequestHeader('User-Agent', this.workingUserAgent);
         xhr.setRequestHeader('Cache-Control', 'no-cache');
         xhr.setRequestHeader('Pragma', 'no-cache');
+        // Zusätzliche Headers für iOS
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.setRequestHeader('Accept-Language', 'en-US,en;q=0.9');
         
         console.log(`🤖 XHR User-Agent: ${this.workingUserAgent}`);
         console.log('📤 XHR Sending request...');
@@ -286,71 +308,67 @@ export class XtreamCodesClient {
       try {
         console.log(`🔗 Xtream authentication attempt ${attempt}/${maxRetries}...`);
         
-    const url = this.buildUrl('get_account_info');
-    
-    console.log('📡 Server URL:', this.credentials.serverUrl);
-    console.log('👤 Username:', this.credentials.username);
-    console.log('🌐 Full API URL:', url);
+        const url = this.buildUrl('get_account_info');
+        
+        console.log('📡 Server URL:', this.credentials.serverUrl);
+        console.log('👤 Username:', this.credentials.username);
+        console.log('🌐 Full API URL:', url);
         console.log('🤖 Using User-Agent:', this.workingUserAgent);
-    
-      console.log('📤 Sending authentication request...');
-      
-        // Versuche zuerst XMLHttpRequest für bessere iOS-Kompatibilität
+        
+        console.log('📤 Sending authentication request...');
+        
         let response: Response;
         let data: any;
         
-        try {
-          console.log('🔄 Trying XMLHttpRequest for iOS compatibility...');
-          data = await this.fetchWithXHR(url);
-          console.log('✅ XMLHttpRequest successful');
+        // Auf iOS immer XMLHttpRequest verwenden für bessere Kompatibilität
+        if (Platform.OS === 'ios') {
+          console.log('📱 iOS detected - using optimized XMLHttpRequest');
           
-          // Simuliere Response-Objekt für Kompatibilität
-          response = {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => data,
-            headers: new Map() as any
-          } as any;
+          // Validiere URL vor der Anfrage
+          const validation = IOSNetworkHelper.validateServerUrl(url);
+          if (!validation.valid) {
+            throw new Error(validation.error || 'Invalid server URL');
+          }
           
-        } catch (xhrError) {
-          console.log('❌ XMLHttpRequest failed, falling back to fetch:', xhrError);
-          
-          // Fallback zu fetch
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-          }, 15000); // 15 seconds timeout für Xtream
-      
-          response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-              'User-Agent': this.workingUserAgent,
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-        },
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      
-          console.log(`📥 Fetch Response status: ${response.status} ${response.statusText}`);
-      console.log(`🌐 Response headers:`, JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2));
-      
-          data = await response.json();
+          data = await IOSNetworkHelper.performIOSRequest(url, this.workingUserAgent);
+          console.log('✅ iOS XMLHttpRequest successful');
+          return data as XtreamAuthResponse;
         }
         
+        // Für andere Plattformen normale fetch API
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 15000); // 15 seconds timeout für Xtream
+        
+        response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': this.workingUserAgent,
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        console.log(`📥 Fetch Response status: ${response.status} ${response.statusText}`);
+        console.log(`🌐 Response headers:`, JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2));
+        
+        data = await response.json();
+        
         console.log(`📥 Final response status: ${response.status} ${response.statusText}`);
-      console.log('📋 Response data:', JSON.stringify(data, null, 2));
-      
-      if (data.user_info?.auth !== 1) {
-        throw new Error(`Authentication failed: ${data.user_info?.message || 'Invalid credentials'}`);
-      }
-      
+        console.log('📋 Response data:', JSON.stringify(data, null, 2));
+        
+        if (data.user_info?.auth !== 1) {
+          throw new Error(`Authentication failed: ${data.user_info?.message || 'Invalid credentials'}`);
+        }
+        
         console.log(`✅ Authentication successful on attempt ${attempt}`);
-      return data;
+        return data;
         
     } catch (error) {
         console.error(`❌ Authentication error on attempt ${attempt}:`, error);
@@ -478,9 +496,9 @@ export class XtreamCodesClient {
           // Try different Xtream live stream URL formats based on stream type
           let streamUrl: string;
           
-          // Method 1: Standard live stream format
+          // Method 1: Standard live stream format - verwende streamBaseUrl
           if (stream.stream_type === 'live') {
-            streamUrl = `${this.baseUrl}live/${this.credentials.username}/${this.credentials.password}/${stream.stream_id}.ts`;
+            streamUrl = `${this.streamBaseUrl}/live/${this.credentials.username}/${this.credentials.password}/${stream.stream_id}.ts`;
           } 
           // Method 2: Alternative format for some providers
           else if (stream.direct_source && stream.direct_source.startsWith('http')) {
@@ -488,7 +506,7 @@ export class XtreamCodesClient {
           }
           // Method 3: HLS format
           else {
-            streamUrl = `${this.baseUrl}live/${this.credentials.username}/${this.credentials.password}/${stream.stream_id}.m3u8`;
+            streamUrl = `${this.streamBaseUrl}/live/${this.credentials.username}/${this.credentials.password}/${stream.stream_id}.m3u8`;
           }
           
           console.log(`Stream ${stream.stream_id} (${stream.name}): ${streamUrl}`);
@@ -516,7 +534,7 @@ export class XtreamCodesClient {
   }
 
   getStreamUrl(streamId: number): string {
-    return `${this.baseUrl}live/${this.credentials.username}/${this.credentials.password}/${streamId}.ts`;
+    return `${this.streamBaseUrl}/live/${this.credentials.username}/${this.credentials.password}/${streamId}.ts`;
   }
 
   // Static method to validate Xtream credentials format
